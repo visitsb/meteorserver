@@ -1,0 +1,29 @@
+#!/bin/sh
+# description: Runs meteord
+# chkconfig: 2345 99 00
+
+# Source function library.
+. /etc/init.d/functions
+
+case "$1" in
+'start')
+echo -n "Starting Meteord: "
+echo 65535 > /proc/sys/fs/file-max
+ulimit -n 65535
+cd /usr/local/meteor
+sudo -u meteor ./meteord >/var/log/meteord 2>&1 &
+echo
+;;
+'stop')
+echo -n "Stopping Meteord: "
+killall meteord && success || failure
+;;
+'reload')
+echo -n "Reloading Meteord configuration: "
+killall -s SIGHUP meteord && success || failure
+;;
+*)
+echo "Usage: $0 { start | stop | reload }"
+;;
+esac
+exit 0

@@ -1,0 +1,72 @@
+<html>
+<body>
+<script type="text/javascript">
+window.onError = null;
+var domainparts = document.domain.split(".");
+document.domain = domainparts[domainparts.length-2]+"."+domainparts[domainparts.length-1];
+parent.Meteor.register(this);
+var streamreq;
+var byteoffset;
+var newdata;
+
+function abort() {
+	streamreq.abort();
+}
+
+function newXmlHttp() {
+    try { return new ActiveXObject("Msxml2.XMLHTTP"); } catch (e) {}
+    try { return new ActiveXObject("Microsoft.XMLHTTP"); } catch (e) {}
+    try { return new XMLHttpRequest(); } catch(e) {}
+    return null;
+}
+
+function startstream() {
+	streamreq = newXmlHttp();
+	byteoffset = 0;
+	newdata = "";
+	var url = parent.Meteor.getSubsUrl();
+	streamreq.open("GET", url, true);
+	streamreq.onreadystatechange = function() {
+		if (typeof streamreq == "undefined") return;
+		if (streamreq.readyState == 3) {
+			extractEvents(streamreq.responseText);
+		} else if (streamreq.readyState == 4) {
+			extractEvents(streamreq.responseText);
+			delete streamreq;
+			if (typeof(r)=="function") {
+				r();
+			}
+		}
+	}
+	streamreq.send(null);
+}
+
+function extractEvents(responsestr) {
+	newdata += responsestr.substring(byteoffset);
+	byteoffset = responsestr.length;
+	while (1) {
+		var x = newdata.indexOf("<s"+"cript>");
+		if (x != -1) {
+			y = newdata.indexOf("</"+"script>", x);
+			if (y != -1) {
+				eval(newdata.substring((x+8),y));
+				newdata = newdata.substring(y+9);
+			} else {
+
+				// Last message is incomplete.  Ignore it and it will be processed next time
+				break;
+			}
+		} else {
+
+			// No more messages
+			break;
+		}
+	}
+}
+
+
+
+startstream();
+</script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+#!/usr/bin/perl -w
+###############################################################################
+#   Meteor
+#   An HTTP server for the 2.0 web
+#   Copyright (c) 2006 contributing authors
+#
+#   The Meteor daemon
+#
+#	Main program should call Meteor::Config::setCommandLineParameters(@ARGV),.
+#	Afterwards anybody can access $::CONF{<parameterName>}, where
+#	<parameterName> is any valid parameter (except 'Help') listed in the
+#	@DEFAULTS array below.
+#
+###############################################################################
+#
+#   This program is free software; you can redistribute it and/or modify it
+#   under the terms of the GNU General Public License as published by the Free
+#   Software Foundation; either version 2 of the License, or (at your option)
+#   any later version.
+#
+#   This program is distributed in the hope that it will be useful, but WITHOUT
+#   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#   FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+#   more details.
+#
+#   You should have received a copy of the GNU General Public License along
+#   with this program; if not, write to the Free Software Foundation, Inc.,
+#   59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+#
+#   For more information visit www.meteorserver.org
+#
+###############################################################################
+
+###############################################################################
+# meterod version
+################################################################################
+	
+	$::VERSION='1.06';
+	$::RELEASE_DATE='2008-03-02';
+
+###############################################################################
+# Configuration
+###############################################################################
+	
+	use strict;
+	
+	use Socket;
+	
+	use Meteor::Syslog;
+	
+	use Meteor::Socket;
+	use Meteor::Connection;
+	use Meteor::Controller;
+	use Meteor::Subscriber;
+	use Meteor::Channel;
+	use Meteor::Document;
+	use Meteor::Config;
+	
+	$::CRLF="\r\n";		# Line separator to be used throughout all modules
+	
+	our $CONTROL_QUEUE_SIZE=5;
+	our $SUBSCRIBER_QUEUE_SIZE=20;
+	
+	our $MAIN_LOOP_TIMEOUT=60;
+	our $AGE_CHECK_INTERVALL=60;
+	
+	our $MAX_EXIT_DELAY=120;
+	
+	our $UDP_MAX_MESSAGE_SIZE=8192;
+
+###############################################################################
+# Main
+###############################################################################
+	
+	#
+	# Record startup time
+	# 
+	$::STARTUP_TIME=time;
+	$::STARTUP_TIME+=0; # avoid warning
+	
+	#
+	# Program name
+	#
+	$::PGM=$0;
+	$::PGM=~s/^.*\///;
+	
+	#
+	# Handle command line options and config file
+	#
+	Meteor::Config->setCommandLineParameters(@ARGV);
+	
+	#
+	# Do something about warn and die
+	#
+	unless($::CONF{'Debug'})
+	{
+		$SIG{'__WARN__'}=\&Meteor::Syslog::myWarn;
+		$SIG{'__DIE__'}=\&Meteor::Syslog::myDie;
+	}
+	
+	&::syslog('info',"$::PGM launched!");
+	
+	#
+	# Daemonize
+	#
+	{
+		$0="$::PGM daemon";
+		
+		my $facility=$::CONF{'SyslogFacility'} || $Meteor::Syslog::DEFAULT_FACILITY;
+		
+		unless($::CONF{'Debug'} || $facility eq 'none')
+		{
+			# close standard file descriptors
+			close(STDIN);
+			close(STDOUT);
+			close(STDERR);
+			chdir("/");
+			umask(0);
+			# fork and exit parent
+			exit if fork;
+			setpgrp(0, $$) if defined $SIG{TTOU};
+			$SIG{TTOU}='ignore' if defined $SIG{TTOU};
+			
+			# Avoid 'stdin reopened for output' warning with newer perls
+			open(NULL,'/dev/null');
+			<NULL> if(0);
+			
+			open(OUT,">/var/run/$::PGM.pid");
+			print OUT "$$\n";
+			close(OUT);
+		}
+		else
+		{
+			&::syslog('info',"PID\t%s",$$);
+		}
+	}
+	
+	#
+	# Signal handlers
+	#
+	$::HUP=$::TERM=$::USR1=$::USR2=0;
+	$SIG{'HUP'}=sub{$::HUP=1};
+	$SIG{'TERM'}=sub{$::TERM=1};
+	$SIG{'USR1'}=sub{$::USR1=1};
+	$SIG{'USR2'}=sub{$::USR2=1};
+	
+	#
+	# Run server
+	#
+	my $con_counter=0;
+	my $con;
+	
+	my $controlServer=Meteor::Socket->newServer(
+		$::CONF{'ControllerPort'},
+		$CONTROL_QUEUE_SIZE,
+		$::CONF{'ControllerIP'}
+	);
+	my $controlServerFN=$controlServer->fileno();
+	
+	my $subscriberServer=Meteor::Socket->newServer(
+		$::CONF{'SubscriberPort'},
+		$SUBSCRIBER_QUEUE_SIZE,
+		$::CONF{'SubscriberIP'}
+	);
+	my $subscriberServerFN=$subscriberServer->fileno();
+	
+	my $udpServer=undef;
+	my $udpPort=$::CONF{'UDPPort'};
+	my $udpServerFN=undef;
+	if($udpPort && $udpPort>0)
+	{
+		$udpServer=Meteor::Socket->newUDPServer(
+			$udpPort,
+			$::CONF{'UDPIP'}
+		);
+		$udpServerFN=$udpServer->fileno();
+	}
+	
+	my $serverVector='';
+	vec($serverVector,$controlServerFN,1)=1;
+	vec($serverVector,$subscriberServerFN,1)=1;
+	vec($serverVector,$udpServerFN,1)=1 if(defined($udpServerFN));
+	
+	my $lastAgeCheck=time;
+	
+	my $nextPing=undef;
+	if(exists($::CONF{'PingInterval'}) && $::CONF{'PingInterval'}>2)
+	{
+		$nextPing=$::CONF{'PingInterval'}+$lastAgeCheck;
+	}
+	
+	while(!$::TERM)
+	{
+		eval
+		{
+			while(!$::TERM)
+			{
+				my $rVec=$serverVector;
+				my $wVec='';
+				my $eVec='';
+			
+				my $rout;
+				my $wout;
+				my $eout;
+			
+				Meteor::Connection->addAllHandleBits(\$rVec,\$wVec,\$eVec);
+				
+				my $timeout=$MAIN_LOOP_TIMEOUT;
+				if(defined($nextPing))
+				{
+					$timeout=$nextPing-time;
+				}
+				
+				my $result=0;
+				if($timeout>0)
+				{
+					$result=&Meteor::Socket::sselect($rout=$rVec,$wout=$wVec,$eout=$eVec,$timeout);
+				}
+				
+				if($result>0)
+				{
+					if(vec($rout,$controlServerFN,1))
+					{
+						Meteor::Controller->newFromServer($controlServer);
+					}
+					if(vec($rout,$subscriberServerFN,1))
+					{
+						Meteor::Subscriber->newFromServer($subscriberServer);
+					}
+					if(defined($udpServerFN) && vec($rout,$udpServerFN,1))
+					{
+						&handleUPD($udpServer);
+					}
+					
+					Meteor::Connection->checkAllHandleBits($rout,$wout,$eout);
+				}
+				elsif($result<0)
+				{
+					&::syslog('crit',"Select failed: $!");
+					sleep(30);
+				}
+				
+				if($::HUP)
+				{
+					$::HUP=0;
+					
+					&::syslog('info',"Received SIGHUP, re-reading config and clearing document cache!");
+					
+					Meteor::Config->readConfig();
+					Meteor::Config->updateConfig();
+					
+					Meteor::Document->clearDocuments()
+				}
+				
+				if($::USR1)
+				{
+					$::USR1=0;
+					
+					&::syslog('info',"Received SIGUSR1, clearing channel buffers!");
+					
+					Meteor::Channel->clearAllBuffers();
+				}
+				
+				if($::USR2)
+				{
+					$::USR2=0;
+					
+					&::syslog('info',"Received SIGUSR2, clearing document cache!");
+					
+					Meteor::Document->clearDocuments()
+				}
+				
+				my $t=time;
+				if($t>$lastAgeCheck+$AGE_CHECK_INTERVALL)
+				{
+					my $minTimeStap=time-$::CONF{'MaxMessageAge'};
+					Meteor::Channel->trimMessageStoresByTimestamp($minTimeStap);
+					$lastAgeCheck=time;
+					$t=$lastAgeCheck;
+					
+					Meteor::Subscriber->checkPersistentConnectionsForMaxTime();
+				}
+				
+				if(defined($nextPing) && $nextPing<=$t)
+				{
+					$nextPing=undef;
+					
+					Meteor::Subscriber->pingPersistentConnections();
+					
+					if(exists($::CONF{'MaxMessageAge'}) && $::CONF{'MaxMessageAge'}>2)
+					{
+						$nextPing=$::CONF{'PingInterval'}+time;
+					}
+				}
+			}
+		};
+		unless($::TERM)
+		{
+			&::syslog('alert',"$::PGM loop died (will restart in 2 seconds): $@");
+			sleep(2);
+		}
+	}
+	
+	#
+	# Proper shutdown
+	#
+	if($::TERM)
+	{
+		&::syslog('info',"Received SIGTERM, begin shutdown!");
+		
+		$subscriberServer->close();
+		$controlServer->close();
+		
+		unlink("/var/run/$::PGM.pid") unless($::CONF{'Debug'});
+		
+		Meteor::Connection->closeAllConnections();
+		
+		my $timoutAt=time+$MAX_EXIT_DELAY;
+		
+		while(Meteor::Connection->connectionCount() && time<$timoutAt)
+		{
+			my $rVec='';
+			my $wVec='';
+			my $eVec='';
+			
+			my $rout;
+			my $wout;
+			my $eout;
+			
+			Meteor::Connection->addAllHandleBits(\$rVec,\$wVec,\$eVec);
+			
+			my $result=&Meteor::Socket::sselect($rout=$rVec,$wout=$wVec,$eout=$eVec,$timoutAt-time);
+			
+			if($result>0)
+			{
+				Meteor::Connection->checkAllHandleBits($rout,$wout,$eout);
+			}
+		}
+		
+		if(my $cnt=Meteor::Connection->connectionCount())
+		{
+			&::syslog('info',"$cnt client(s) unresponsive, will shutdown anyway");
+			
+			exit(1);
+		}
+		
+		&::syslog('info',"shutdown succeeded");
+		
+		exit(0);
+	}
+	
+	&::syslog('emerg',"$::PGM loop exited");
+
+###############################################################################
+# Subroutines
+###############################################################################
+sub handleUPD {
+	$udpServer=shift;
+	
+	my $line;
+	my $hispaddr=recv($udpServer->{'handle'},$line,$::UDP_MAX_MESSAGE_SIZE,0);
+	
+	&::syslog('debug',"udp message received: %s",$line);
+	
+	return unless($line=~s/^(\S+)\s//);
+	
+	my $cmd=$1;
+	
+	if($cmd eq 'ADDMESSAGE')
+	{
+		return unless($line=~s/^(\S+)\s//);
+		
+		my $channelName=$1;
+		my $channel=Meteor::Channel->channelWithName($channelName);
+		my $msg=$channel->addMessage($line);
+		my $msgID=$msg->id();
+		&::syslog('debug',"udp: new message added, ID %s",$msgID);
+	}
+}
+
+1;
+############################################################################EOF

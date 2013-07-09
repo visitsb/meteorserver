@@ -1,0 +1,99 @@
+<html>
+<body>
+<script type="text/javascript">
+window.onError = null;
+var domainparts = document.domain.split(".");
+var thisdomain = document.domain;
+var topdomain = domainparts[domainparts.length-2]+"."+domainparts[domainparts.length-1];
+document.domain = topdomain;
+var lastrequesttime = 0;
+var pollreq = null;
+var polltimer = false;
+var i=0;
+var isaborted = 0;
+parent.Meteor.register(this);
+
+function newXmlHttp() {
+	try { return new ActiveXObject("Msxml2.XMLHTTP"); } catch (e) {}
+	try { return new ActiveXObject("Microsoft.XMLHTTP"); } catch (e) {}
+	try { return new XMLHttpRequest(); } catch(e) {}
+	return null;
+}
+
+function poll() {
+	isaborted = 0;
+	pollreq = null;
+	try {
+		clearTimeout(polltimer);
+	} catch (e) {}
+	var byteoffset = 0;
+	var newdata;
+	try {
+		var url = parent.Meteor.getSubsUrl();
+	} catch(e) {
+		return false;
+	}
+	if (typeof(url)!="undefined") {
+		pollreq = newXmlHttp();
+		pollreq.onreadystatechange = handleresponse;
+		pollreq.open("GET", url, true);
+		var now = new Date();
+		var t = now.getTime();
+		lastrequesttime = t;
+		if (parent.Meteor.polltimeout) polltimer = setTimeout(ptimeout, parent.Meteor.polltimeout);
+		pollreq.send(null);
+	}
+}
+
+function handleresponse() {
+	if (typeof(pollreq) == "object" && pollreq.readyState == 4 && !isaborted) {
+		try {
+			clearTimeout(polltimer);
+		} catch (e) {}
+		try {
+			var y = parent.Meteor.getSubsUrl();
+		} catch (e) { return false };
+		newdata = pollreq.responseText;
+		while (1) {
+			var x = newdata.indexOf("<s"+"cript>");
+			if (x != -1) {
+				y = newdata.indexOf("</"+"script>", x);
+				if (y != -1) {
+					eval(newdata.substring((x+8),y));
+					newdata = newdata.substring(y+9);
+				} else {
+					break;
+				}
+			} else {
+				break;
+			}
+		}
+		if (parent.Meteor.status) {
+			var now = new Date();
+			var t = now.getTime();
+			var x = parent.Meteor.pollfreq - (t-lastrequesttime);
+			if (x < 10) x = 10;
+			pollreq = null;
+			setTimeout(poll, x);
+		}
+	}
+}
+
+function ptimeout() {
+	isaborted = 1;
+	pollreq.abort();
+	pollreq = null;
+	clearTimeout(polltimer);
+	var now = new Date();
+	var t = now.getTime();
+	var x = parent.Meteor.pollfreq - (t-lastrequesttime);
+	if (x < 10) x = 10;
+	setTimeout(poll, x);
+}
+
+poll();
+
+
+</script>
+</body>
+</html>
