@@ -11,7 +11,7 @@ A Windows, or *nix webserver environment with latest version of Perl installed.
 
 # Installation
 
-1. Download [latest version](build/meteor-latest.tgz), unzip and setup meteor.
+1. Download [latest version](build/meteor-latest.tgz?raw=true), unzip and setup meteor.
 2. Add meteor.js to your page
 3. Register an event callback in your page via Javascript
 
