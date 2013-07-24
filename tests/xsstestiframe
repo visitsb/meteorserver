@@ -1,0 +1,29 @@
+<?php
+header("Expires: Mon, 04 Oct 2004 09:00:00 GMT");
+header("Cache-Control: max-age=0, public");
+header("Cache-Control: no-store, no-cache, must-revalidate", false);
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+header("Content-type: text/html");
+?>
+<script>
+<?php
+if (!empty($_GET["noise"])) {
+	echo str_repeat("//#####################################;\n", 26);
+}
+flush();
+if (ob_get_level()) ob_flush();
+if (!isset($_GET["inc"])) $_GET["inc"] = 0;
+for ($i=0; $i<=$_GET["inc"]; $i++) {
+	?>
+	x = document.domain.split('.');
+	document.domain = x.slice(-2, x.length).join(".");
+	try { parent.testDone("Success from "+location.href); } catch(e) {}
+	</script>
+	<?php
+	flush();
+	if (ob_get_level()) ob_flush();
+	if ($_GET["inc"]) sleep(5);
+}
+?>
+Done.

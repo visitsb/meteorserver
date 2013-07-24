@@ -1,0 +1,411 @@
+<html>
+<head>
+<script>
+function newXmlHttp() {
+	var xmlhttp;
+	/*@cc_on @*/
+	/*@if (@_jscript_version >= 5)
+		try {
+			xmlhttp = new ActiveXObject("Msxml2.XMLHTTP");
+		} catch (e) {
+			try {
+				xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+			} catch (E) {
+				xmlhttp = false;
+			}
+		}
+	@end @*/
+	if (!xmlhttp && typeof XMLHttpRequest!='undefined') {
+		xmlhttp = new XMLHttpRequest();
+	}
+	return xmlhttp;
+}
+
+function runTest(el, type, persistence, host, port, noise) {
+	if (testinprog) return false;
+	var op = "";
+	el.blur();
+	el = el.parentNode.parentNode;
+	testinprog = el;
+	var inps = document.getElementsByTagName("INPUT");
+	for (var i=(inps.length-1); i>=0; i--) inps[i].disabled=true;
+	var opcell = testinprog.lastChild;
+	if (opcell.tagName != "TD") opcell = opcell.previousSibling;
+	opcell.innerHTML = "Testing...";
+	var d = new Date();
+
+	if (type=="xhr" || type=="iframe" || type=="script") {
+		var url = (host=="orighost") ? "http://"+origdomain : "http://"+topdomain;
+		url += (port=="origport") ? "" : ":81";
+		url += (type=="script") ? "/xsstestjs" : "/xsstestiframe";
+		//url += (persistence=="inc") ? "?inc=1" : "?inc=0";
+		url += (persistence=="inc") ? "?inc=5" : "?inc=0";
+		url += (noise=="noise") ? "&noise=1" : "&noise=0";
+		url += "&nc="+d.getTime();
+	}
+
+	//testTimer = setTimeout("testDone('Failed')", 3000);
+	teststart = d.getTime();
+	if (type=="xhr") {
+		try {
+			var req = newXmlHttp();
+			req.onreadystatechange = function() {
+				try {
+					if (persistence=="inc" && req.readyState == 3 && testinprog != false && req.responseText.length) {
+						//testDone("Success - received readyState 3");
+						alert("Success - received readyState 3");
+					} else if (persistence=="one" && req.readyState == 4 && testinprog != false && req.responseText.length) {
+						testDone("Success - received readyState 4");
+					}
+				} catch(e) {
+					testDone(e); return false
+				}
+			}
+			req.open("GET", url, true);
+			req.send(null);
+		} catch(e) {
+			testDone(e); return false
+		}
+	} else if (type=="iframe") {					
+		var ifr = document.createElement("IFRAME");
+		ifr.setAttribute("id", "testifr");
+		document.body.appendChild(ifr);
+		document.getElementById("testifr").src = url;
+	} else if (type=="script") {
+		var scr = document.createElement("SCRIPT");
+		scr.setAttribute("src", url);
+		scr.setAttribute("id", "testscr");
+		scr.setAttribute("type","text/javascript");
+		document.getElementsByTagName('head')[0].appendChild(scr);
+	} else if (type=="shortddcheck") {
+		try {
+			document.domain = topdomain;
+		} catch(e) {
+			testDone(e); return false
+		}
+		document.getElementById("dd").innerHTML = document.domain;
+		testDone("Success");
+	} else if (type=="longddcheck") {
+		try {
+			document.domain = origdomain;
+		} catch(e) {
+			testDone(e); return false
+		}
+		document.getElementById("dd").innerHTML = document.domain;
+		testDone("Success");
+	}
+}
+
+function testDone(op) {
+	var d = new Date();
+	var elapsed = d - teststart;
+	if (typeof op == "object" && op.description) op = op.description;
+	if (testinprog != false) {
+		var opcell = testinprog.lastChild;
+		if (opcell.tagName != "TD") opcell = opcell.previousSibling;
+		testinprog = false;
+		clearTimeout(testTimer);
+		opcell.innerHTML = (elapsed < 3000) ? op : "Failed";
+	}
+	var inps = document.getElementsByTagName("INPUT");
+	for (var i=(inps.length-1); i>=0; i--) inps[i].disabled=false;
+	if (document.getElementById("testscr")) document.getElementsByTagName('head')[0].removeChild(document.getElementById("testscr"));
+	if (document.getElementById("testifr")) document.body.removeChild(document.getElementById("testifr"));
+}
+
+window.onload = function() {
+	var rows = document.getElementsByTagName("TR");
+	for (var i=(rows.length-1); i>=1; i--) {
+		var cell = rows[i].firstChild;
+		if (cell.tagName != "TD") cell = cell.nextSibling;
+		cell.innerHTML = i;
+	}
+}
+
+var origdomain = document.domain;
+domain_pieces = document.domain.split('.');
+var topdomain = domain_pieces.slice(-2, domain_pieces.length).join(".");
+var testinprog = false;
+var testTimer = false;
+var teststart = 0;
+
+</script>
+<style type="text/css">
+table { border: 1px solid #888; width: 100% }
+td, th {border: 1px solid #888; padding: 4px; font-size: 12px }
+body { font-family: sans-serif }
+.op { width: 40% }
+</style>
+<body>
+	<h2>XSS tests - wait for any responses to complete before running the next test!</h2>
+	<h3><strong>Please note - these tests are no longer functional, and have potentially been in a broken state for a considerable period of time.  This was noticed in October 2012.  They are retained for historic reference.  </strong></h3>
+	<table cellspacing="0">
+	<tr>
+	<th colspan="6">Test</th>
+	<th>Do it</th>
+	<th>Result</th>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="12">XMLHTTPRequest</td>
+	<td rowspan="4">Normal request (readystate 4, one part)</td>
+	<td rowspan="2">originating host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'one', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'one', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">parent host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'one', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'one', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="8">Interactive (readystate 3, incremental)</td>
+	<td rowspan="4">originating host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'orighost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'orighost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="4">parent host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'parhost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'xhr', 'inc', 'parhost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="12">IFRAME</td>
+	<td rowspan="4">one part</td>
+	<td rowspan="2">originating host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'one', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'one', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">parent host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'one', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'one', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="8">incremenal load</td>
+	<td rowspan="4">originating host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'orighost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'orighost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="4">parent host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'parhost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'iframe', 'inc', 'parhost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="12">&lt;SCRIPT&gt; import</td>
+	<td rowspan="4">one part</td>
+	<td rowspan="2">originating host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'one', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'one', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">parent host</td>
+	<td colspan="2">originating port</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'one', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="2">different port</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'one', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="8">incremental load</td>
+	<td rowspan="4">originating host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'orighost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'orighost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'orighost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'orighost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="4">parent host</td>
+	<td rowspan="2">originating port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'parhost', 'origport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'parhost', 'origport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td rowspan="2">different port</td>
+	<td>no noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'parhost', 'diffport', 'nonoise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td>1K prepended noise</td>
+	<td><input type="button" onclick="runTest(this, 'script', 'inc', 'parhost', 'diffport', 'noise')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="5">Shorten document.domain</td>
+	<td><input type="button" onclick="runTest(this, 'shortddcheck')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+
+	</tr><tr>
+	<td>#</td>
+	<td colspan="5">Lengthen document.domain</td>
+	<td><input type="button" onclick="runTest(this, 'longddcheck')" value="Run" /></td>
+	<td class="op">&nbsp;</td>
+	</tr>
+	</table>
+	<p>The value of document.domain in this frame is <b id="dd"><script>document.write(document.domain)</script></b></p>
+</body>
+</html>

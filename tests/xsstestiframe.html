@@ -1,0 +1,24 @@
+<?php
+header("Expires: Mon, 04 Oct 2004 09:00:00 GMT");
+header("Cache-Control: max-age=0, public");
+header("Cache-Control: no-store, no-cache, must-revalidate", false);
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+?>
+<html>
+<head>
+<script>
+
+	domain_pieces = document.domain.split('.');
+	var topdomain = domain_pieces.slice(-2, domain_pieces.length).join(".");
+	document.domain=topdomain;
+
+	try {
+		parent.returnValFromFrame("Success");
+	} catch (e) {
+		if (typeof e == "object" && e.description) e = e.description;
+		alert(e);
+	}
+
+</script>
+</html>

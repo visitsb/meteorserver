@@ -1,0 +1,26 @@
+<?php
+header("Expires: Mon, 04 Oct 2004 09:00:00 GMT");
+header("Cache-Control: max-age=0, public");
+header("Cache-Control: no-store, no-cache, must-revalidate", false);
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+?>
+<script>
+<?php
+if ($_GET["noise"]) {
+	echo str_repeat("//#####################################;\n", 26);
+}
+?>
+x = document.domain.split('.');
+document.domain = x.slice(-2, x.length).join(".");
+try { parent.returnValFromFrame("Success"); } catch(e) {
+	if (typeof e == "object" && e.description) e = e.description;
+	alert(e);
+}
+</script>
+<?php
+flush();
+ob_flush();
+sleep(10);
+?>
+Done.
