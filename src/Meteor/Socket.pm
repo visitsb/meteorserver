@@ -205,11 +205,9 @@ sub conSocket {
 sub setNonBlocking {
 	my $self=shift;
 	
-#	my $flags=fcntl($self->{'handle'},F_GETFL,0)
-#		or die("Can't get flags for the socket: $!");
-#	fcntl($self->{'handle'},F_SETFL,$flags|O_NONBLOCK)
-#		or die("Can't set flags for the socket: $!");
-	defined(($self->{'handle'})->blocking(0))
+	my $flags=fcntl($self->{'handle'},F_GETFL,0)
+		or die("Can't get flags for the socket: $!");
+	fcntl($self->{'handle'},F_SETFL,$flags|O_NONBLOCK)
 		or die("Can't set flags for the socket: $!");
 }
 

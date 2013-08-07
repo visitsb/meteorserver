@@ -1,0 +1,31 @@
+From f7a74686e558fae7ee23e87829c118b4f97161f8 Mon Sep 17 00:00:00 2001
+From: Shantibhushan <visitsb@gmail.com>
+Date: Wed, 7 Aug 2013 16:28:18 +0900
+Subject: [PATCH] Non-blocking sockets using Perl on Windows
+
+---
+ src/Meteor/Socket.pm |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/Meteor/Socket.pm b/src/Meteor/Socket.pm
+index 19de6cf..ad95e2a 100644
+--- a/src/Meteor/Socket.pm
++++ b/src/Meteor/Socket.pm
+@@ -205,9 +205,11 @@ sub conSocket {
+ sub setNonBlocking {
+ 	my $self=shift;
+ 	
+-	my $flags=fcntl($self->{'handle'},F_GETFL,0)
+-		or die("Can't get flags for the socket: $!");
+-	fcntl($self->{'handle'},F_SETFL,$flags|O_NONBLOCK)
++#	my $flags=fcntl($self->{'handle'},F_GETFL,0)
++#		or die("Can't get flags for the socket: $!");
++#	fcntl($self->{'handle'},F_SETFL,$flags|O_NONBLOCK)
++#		or die("Can't set flags for the socket: $!");
++	defined(($self->{'handle'})->blocking(0))
+ 		or die("Can't set flags for the socket: $!");
+ }
+ 
+-- 
+1.7.6.msysgit.0
+
