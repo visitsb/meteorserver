@@ -26,6 +26,7 @@ Meteor = {
 	pingtimeout: 20000,
 	pingtimer: null,
 	pollfreq: 3000,
+    scheme: 'http',
 	port: 80,
 	polltimeout: 30000,
 	recvtimes: [],
@@ -75,13 +76,13 @@ Meteor = {
 			if (Meteor.mode == "iframe") {
 				Meteor.loadFrame(Meteor.getSubsUrl());
 			} else {
-				Meteor.loadFrame("http://"+Meteor.host+((Meteor.port==80)?"":":"+Meteor.port)+"/stream.html");
+				Meteor.loadFrame(Meteor.scheme+"://"+Meteor.host+((Meteor.port==80)?"":":"+Meteor.port)+"/stream.html");
 			}
 			clearTimeout(Meteor.pingtimer);
 			Meteor.pingtimer = setTimeout(Meteor.pollmode, Meteor.pingtimeout);
 
 		} else {
-			Meteor.loadFrame("http://"+Meteor.host+((Meteor.port==80)?"":":"+Meteor.port)+"/poll.html");
+			Meteor.loadFrame(Meteor.scheme+"://"+Meteor.host+((Meteor.port==80)?"":":"+Meteor.port)+"/poll.html");
 			Meteor.recvtimes[0] = t;
 			if (Meteor.updatepollfreqtimer) clearTimeout(Meteor.updatepollfreqtimer);
 			if (Meteor.mode=='smartpoll') Meteor.updatepollfreqtimer = setInterval(Meteor.updatepollfreq, 2500);
@@ -111,7 +112,7 @@ Meteor = {
 	},
 
 	getSubsUrl: function() {
-		var surl = "http://" + Meteor.host + ((Meteor.port==80)?"":":"+Meteor.port) + "/push/" + Meteor.hostid + "/" + Meteor.mode;
+		var surl = Meteor.scheme+"://" + Meteor.host + ((Meteor.port==80)?"":":"+Meteor.port) + "/push/" + Meteor.hostid + "/" + Meteor.mode;
 		for (var c in Meteor.channels) {
 			surl += "/"+c;
 			if (Meteor.channels[c].lastmsgreceived > 0) {
