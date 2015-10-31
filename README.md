@@ -18,9 +18,9 @@ Meteor is two servers in one. It listens on one port for event controllers, and 
 
 Subscribers are clients that connect on the subscriber port, and use the standard HTTP protocol to request a subscription to a particular channel or channels. A wide variety of querystring parameters can be included by the subscriber to indicate which interaction mode is desired.
 
-Meteor then [sends the events](http://meteorserver.org/interaction-modes/) provided by the event controllers to the channel subscribers. All events are cached in memory so that the overhead required to send an event to a subscriber is minimal. In this way a few event controllers can do most of the hard work generating and formatting data, but without repetition, while Meteor handles the task of delivering the data to a large audience in near-real time.
+Meteor then [sends the events](http://meteorserver.org/#interaction-modes) provided by the event controllers to the channel subscribers. All events are cached in memory so that the overhead required to send an event to a subscriber is minimal. In this way a few event controllers can do most of the hard work generating and formatting data, but without repetition, while Meteor handles the task of delivering the data to a large audience in near-real time.
 
-Meteor works reliably in your browser *today* by employing several [intelligent techniques](http://meteorserver.org/browser-techniques/). This allows significant advantages to begin using realtime HTTP web today.
+Meteor works reliably in your browser *today* by employing several [intelligent techniques](http://meteorserver.org/#browser-techniques). This allows significant advantages to begin using realtime HTTP web today.
 
 # Installation
 
@@ -28,7 +28,7 @@ View the [installation instructions](INSTALL.md) to get started.
 
 # FAQ
 
-View current [FAQ](http://meteorserver.org/faq/).
+View current [FAQ](http://meteorserver.org/#faq).
 
 # Future
 
